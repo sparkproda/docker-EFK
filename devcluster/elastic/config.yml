@@ -1,0 +1,36 @@
+---
+_meta:
+  type: "config"
+  config_version: 2
+config:
+  dynamic:
+    http:
+      anonymous_auth_enabled: false
+      xff:
+        enabled: false     
+    authc:
+      basic_internal_auth_domain:
+        http_enabled: true
+        transport_enabled: true
+        order: 0
+        http_authenticator:
+          type: "basic"
+          challenge: false
+        authentication_backend:
+          type: "intern"
+      openid_auth_domain:
+        http_enabled: true
+        transport_enabled: true
+        order: 1
+        http_authenticator:
+          type: openid
+          challenge: false
+          config:
+            openid_connect_url: "http://192.168.99.11:8080/auth/realms/DevOps/.well-known/openid-configuration"            
+            subject_key: username
+            roles_key: role
+            enable_ssl: false
+            verify_hostnames: false
+        authentication_backend:
+          type: noop
+

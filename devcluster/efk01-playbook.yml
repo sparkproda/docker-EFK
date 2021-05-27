@@ -1,0 +1,278 @@
+---
+- hosts: all
+  become: true
+  tasks:
+
+    - name: 'stop firewalld'
+      shell: 'systemctl stop firewalld'
+      register: result
+      failed_when:  result.changed == false
+      ignore_errors: yes
+
+
+    - name: 'Disable SWAP since kubernetes cant work with swap enabled '
+      shell: |
+        swapoff -a
+
+    - name: Install aptitude using apt.
+      apt:
+        name: aptitude
+        state: latest
+        update_cache: yes
+        force_apt_get: yes     
+      ignore_errors: true  
+
+    - name: Install prerequisites.
+      apt:
+        name: '{{ packages }}'
+        update_cache: yes
+        state: latest
+      vars:
+        packages:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+
+
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu bionic stable
+        state: present
+
+    - name: Create a Docker group
+      group: 
+        name: docker 
+        state: present
+      
+    - name: Add the vagrant user to Docker group
+      user: 
+        name: vagrant
+        groups: docker 
+        append: yes        
+
+    - name: Add the jenkins user to Docker group
+      user: 
+        name: jenkins
+        groups: docker 
+        append: yes             
+
+    - name: Install Docker.
+      apt:
+        name: '{{ packages }}'
+        update_cache: yes
+        state: latest
+      vars:
+        packages:
+          - docker-ce
+          - docker-compose
+
+    - name: Start docker
+      service:
+        name: docker
+        state: started
+        enabled: yes   
+  
+
+    - name: Create a network
+      docker_network:
+        name: odfe-net       
+
+    ##### ELK Install ######
+
+
+    - name: elk 디렉토리 생성1
+      file:
+        path: /mnt/odfe-data1
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: 1000         
+
+
+
+    - name: elk config 디렉토리 생성
+      file:
+        path: /mnt/elastic
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "u=rw,g=r,o=r"    
+    - name: elk security config 디렉토리 생성
+      file:
+        path: /mnt/elastic/sec
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "u=rw,g=r,o=r"    
+
+    - name: Copy elastic config from local host to remote host
+      copy:
+        src: "elastic/config.yml"
+        dest: /mnt/elastic/config.yml
+        owner: vagrant
+        group: vagrant
+        mode: "u=rw,g=r,o=r"  
+
+    - name: Copy internal_users from local host to remote host
+      copy:
+        src: "elastic/internal_users.yml"
+        dest: /mnt/elastic/internal_users.yml
+        owner: vagrant
+        group: vagrant
+        mode: "u=rw,g=r,o=r"  
+    - name: Copy internal_users from local host to remote host
+      copy:
+        src: "elastic/roles.yml"
+        dest: /mnt/elastic/roles.yml
+        owner: vagrant
+        group: vagrant
+        mode: "u=rw,g=r,o=r"  
+    - name: Copy internal_users from local host to remote host
+      copy:
+        src: "elastic/roles_mapping.yml"
+        dest: /mnt/elastic/roles_mapping.yml
+        owner: vagrant
+        group: vagrant
+        mode: "u=rw,g=r,o=r"  
+
+    - name: kibana config 디렉토리 생성
+      file:
+        path: /mnt/kibana
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "u=rw,g=r,o=r"    
+    - name: Copy kibana config from local host to remote host
+      copy:
+        src: "kibana/custom-kibana.yml"
+        dest: /mnt/kibana/custom-kibana.yml
+        owner: vagrant
+        group: vagrant
+        mode: "u=rw,g=r,o=r"  
+    - name: fluentd 디렉토리 생성3
+      file:
+        path: /mnt/fluentd
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "u=rw,g=r,o=r"
+
+    - name: Copy fluentd config from local host to remote host
+      copy:
+        src: "fluentd/conf/efk01-fluentd.conf"
+        dest: /mnt/fluentd/fluentd.conf
+        owner: vagrant
+        group: vagrant
+        mode: "u=r,g=r,o=r"  
+    - name: Copy fluentd Dockerfile from local host to remote host
+      copy:
+        src: "fluentd/Dockerfile"
+        dest: /mnt/fluentd/Dockerfile
+        owner: vagrant
+        group: vagrant
+        mode: "u=r,g=r,o=r"
+
+
+
+    - name: set vm.max_map_count to 262144 in sysctl
+      sysctl: name={{ item.key }} value={{ item.value }}
+      with_items:
+        - { key: "vm.max_map_count", value: "262144" }
+
+- name: Run with inline v2 compose
+  hosts: all
+  become: true
+  gather_facts: yes
+  tasks:
+    - community.docker.docker_compose:
+        project_name: efk
+        definition:
+          #
+          version: '3'
+          services:
+            efk01:
+              image: amazon/opendistro-for-elasticsearch:1.13.2
+              container_name: efk01
+              hostname: hostefk01
+              restart: always
+              environment:
+                - cluster.name=odfe-cluster
+                - node.name=hostefk01
+                #- network.host=0.0.0.0
+                - network.publish_host=192.168.99.12
+                - discovery.seed_hosts=192.168.99.12,192.168.99.13,192.168.99.14
+                - cluster.initial_master_nodes=hostefk01,hostefk02,hostefk03
+                - bootstrap.memory_lock=true # along with the memlock settings below, disables swapping
+                - "ES_JAVA_OPTS=-Xms512m -Xmx512m" # minimum and maximum Java heap size, recommend setting both to 50% of system RAM
+                - opendistro_security.ssl.http.enabled=false
+                #- DISABLE_INSTALL_DEMO_CONFIG=true
+              ulimits:
+                memlock:
+                  soft: -1
+                  hard: -1
+                nofile:
+                  soft: 262144
+                  hard: 262144
+              volumes:
+                - /mnt/odfe-data1:/usr/share/elasticsearch/data
+                - /mnt/elastic/config.yml:/usr/share/elasticsearch/plugins/opendistro_security/securityconfig/config.yml
+                #- /mnt/elastic/internal_users.yml:/usr/share/elasticsearch/plugins/opendistro_security/securityconfig/internal_users.yml                
+                #- /mnt/elastic:/usr/share/elasticsearch/plugins/opendistro_security/securityconfig
+              ports:
+                - 9200:9200
+                - 9300:9300
+                - 9600:9600 # required for Performance Analyzer
+              networks:
+                - odfe-net    
+              extra_hosts:
+                - "hostefk01:192.168.99.12"
+                - "hostefk02:192.168.99.13"
+                - "hostefk03:192.168.99.14"
+
+                
+
+            kibana:
+              image: amazon/opendistro-for-elasticsearch-kibana:1.13.2
+              container_name: odfe-kibana
+              hostname: docker-hostefk01              
+              restart: always
+              ports:
+                - 5601:5601
+              expose:
+               - "5601"
+              environment:
+                ELASTICSEARCH_URL: http://hostefk01:9200
+                ELASTICSEARCH_HOSTS: http://hostefk01:9200
+              volumes:
+                - /mnt/kibana/custom-kibana.yml:/usr/share/kibana/config/kibana.yml               
+              networks:
+                - odfe-net       
+              extra_hosts:
+                - "hostefk01:192.168.99.12"
+                - "hostefk02:192.168.99.13"
+                - "hostefk03:192.168.99.14"
+                  
+
+            fluentd:
+              build: /mnt/fluentd/
+              image: sparkfluentd:v0.1
+              container_name: odfe-fluentd
+              user: "vagrant"
+              restart: always              
+              ports:
+                - "24224:24224"
+              volumes:
+                - /mnt/fluentd/fluentd.conf:/fluentd/etc/fluent.conf
+              extra_hosts:
+                - "hostefk01:192.168.99.12"
+                - "hostefk02:192.168.99.13"
+                - "hostefk03:192.168.99.14"                
+
+          networks:
+            odfe-net:        
