@@ -1,8 +1,8 @@
-# Distro Elasticsearch + Fluentd + Kibana (EFK) with Docker CONSISTING OF MULTIPLE HOSTS
+# Open Distro Elasticsearch + Fluentd + Kibana (EFK) with Docker CONSISTING OF MULTIPLE HOSTS
 
 ![EFK](./img/distroElasticsearch.png)
 
-Docker 기반으로 #Distro Elasticsearch, #Fluentd, #Kibana (EFK)를 Host 간 Dockder Swarm 없이 구성했으며, 이중화를 고려해서 3개의 host에 설치구성했습니다.
+Docker 기반으로 #Open Distro Elasticsearch, #Fluentd, #Kibana (EFK)를 Host 간 Dockder Swarm 없이 구성했으며, 이중화를 고려해서 3개의 host에 설치구성했습니다.
 그리고 kibana 인증 연동을 Keycloak과 #OpenID 로 연결하여, Keycloak를 통해서 인증 및 Role mapping이 되게 구성했습니다. 또한 keycloak OpenID 연동은 추후 다시 올리도록 하겠습니다.
 
 Docker기반 구성은 Ansible를 통해서 설치되도록 자동화했습니다. 또한 data directory는 host directory를 mount하여 저장 및 관리/확장이 가능하도록 했습니다. 여기에서는 Kibana 접속 로드 분산을 위해서 로드발런서는 구성하지 않았습니다.
@@ -11,9 +11,9 @@ Docker기반 구성은 Ansible를 통해서 설치되도록 자동화했습니�
 
 ---
 - 설치이미지
-    - amazon/opendistro-for-elasticsearch:1.13.2
-    - fluent/fluentd:v1.6-debian-1
-    - amazon/opendistro-for-elasticsearch-kibana:1.13.2
+  - amazon/opendistro-for-elasticsearch:1.13.2
+  - fluent/fluentd:v1.6-debian-1
+  - amazon/opendistro-for-elasticsearch-kibana:1.13.2
 ---
 
 - 사전 설치 준비 사항
